@@ -4,7 +4,7 @@ import { parseInput, thumbnailUrl, fetchVideoInfo, fetchPlaylistIds, mapLimit } 
 import * as store from './store.js';
 import * as model from './model.js';
 import { state, updateData, updateVideos, usageError } from './state.js';
-import { $, h, show, toast, dialog, field, select, emojiPicker, checkboxes, toggle, iconButton, ICONS, copyText } from './ui.js';
+import { $, h, show, toast, dialog, modal, field, select, emojiPicker, checkboxes, toggle, iconButton, ICONS, copyText } from './ui.js';
 
 const CHECK_KEY = 'mytube:lastCheck';
 const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -57,7 +57,37 @@ export function openParent() {
     $('add-input').value = shared;
     window.scrollTo(0, 0);
     addFromInput(shared);
+  } else if (state.pasteRequest) {
+    state.pasteRequest = false;
+    askPaste();
   }
+}
+
+// El atajo de iPhone copia el enlace y abre MyTube con "pegar=1". Leer el
+// portapapeles exige un toque del usuario, así que se pide con un botón.
+function askPaste() {
+  const btn = h('button', { class: 'btn primary big', type: 'button' }, 'Pegar y añadir el video');
+  const cancel = h('button', { class: 'btn link', type: 'button' }, 'Cancelar');
+  const box = h('div', { class: 'dialog' }, h('h2', {}, 'Añadir el video copiado'), h('p', { class: 'muted' }, 'Toca el botón para pegar el enlace que acabas de compartir.'), btn, cancel);
+  const close = modal(box);
+  cancel.onclick = close;
+  btn.onclick = async () => {
+    let text = '';
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      // Sin permiso para leer: se pega a mano.
+    }
+    close();
+    window.scrollTo(0, 0);
+    if (text && parseInput(text)) {
+      $('add-input').value = text;
+      addFromInput(text);
+    } else {
+      $('add-input').focus();
+      toast('Mantén pulsado el campo y elige «Pegar»');
+    }
+  };
 }
 
 export function renderParent() {
@@ -674,7 +704,7 @@ function familyLink() {
 }
 
 function shortcutBase() {
-  return `${familyLink()}&url=`;
+  return `${familyLink()}&pegar=1`;
 }
 
 async function shareLink() {

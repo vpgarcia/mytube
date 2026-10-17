@@ -291,10 +291,10 @@ function setupLocks() {
 }
 
 async function unlockParent() {
-  const fromRest = screen() === 'rest' && !state.pendingShare;
+  const fromRest = screen() === 'rest' && !state.pendingShare && !state.pasteRequest;
   const pin = await pinPad({
     title: 'Modo padre',
-    subtitle: state.pendingShare ? 'Introduce tu PIN para añadir el video compartido' : 'Introduce tu PIN',
+    subtitle: state.pendingShare || state.pasteRequest ? 'Introduce tu PIN para añadir el video compartido' : 'Introduce tu PIN',
     validate: async (p) => (await store.hashPin(state.familyId, p)) === state.data?.pinHash,
     onForgot: resetPin,
   });
@@ -361,7 +361,7 @@ function connect(familyId) {
         // Al crear una lista se abre el modo padre antes de que lleguen los datos.
         if (screen() === 'parent') renderParent();
         else goHome();
-        if (state.pendingShare) unlockParent();
+        if (state.pendingShare || state.pasteRequest) unlockParent();
         else if (state.shareProblem !== null) reportShareProblem();
         return;
       }
@@ -543,6 +543,7 @@ function init() {
   } else if (params.has('url')) {
     state.shareProblem = '';
   }
+  if (params.has('pegar')) state.pasteRequest = true;
   if (params.toString()) history.replaceState(null, '', location.pathname);
 
   const device = store.getDevice();

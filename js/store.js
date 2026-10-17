@@ -1,9 +1,12 @@
-// Almacenamiento de la "familia": PIN del modo padre y lista de videos.
+// Almacenamiento de la "familia" y del uso diario.
 // Con Firebase configurado se sincroniza en tiempo real entre dispositivos;
 // sin él, se guarda solo en este dispositivo (localStorage).
 //
-// Forma de los datos:
-//   { pinHash: string, videos: [{ id, title, channel, addedAt }], updatedAt }
+// Documento de la familia (families/{código}):
+//   { pinHash, videos: [...], folders: [...], profiles: [...], updatedAt }
+// Uso diario (families/{código}/usage/{perfil}_{AAAA-MM-DD}):
+//   { profileId, date, seconds, bonusSeconds, overrideUntil, unlimited,
+//     history: [{ videoId, title, at, seconds }] }
 
 import { firebaseConfig } from './config.js';
 
@@ -27,6 +30,10 @@ export function setDevice(device) {
   localStorage.setItem(DEVICE_KEY, JSON.stringify(device));
 }
 
+export function updateDevice(changes) {
+  setDevice({ ...getDevice(), ...changes });
+}
+
 export function newFamilyCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH));
   return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
@@ -47,35 +54,37 @@ export async function hashPin(familyId, pin) {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+function readJson(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key));
+  } catch {
+    return null;
+  }
+}
+
 class LocalStore {
   constructor() {
     this.listeners = new Set();
+    this.usageListeners = new Map();
     window.addEventListener('storage', (e) => {
       if (e.key === LOCAL_KEY) this.emit();
+      else if (e.key && this.usageListeners.has(e.key)) this.emitUsage(e.key);
     });
   }
 
-  read() {
-    try {
-      return JSON.parse(localStorage.getItem(LOCAL_KEY));
-    } catch {
-      return null;
-    }
-  }
-
   emit() {
-    const data = this.read();
+    const data = readJson(LOCAL_KEY);
     this.listeners.forEach((cb) => cb(data));
   }
 
   subscribe(cb) {
     this.listeners.add(cb);
-    cb(this.read());
+    cb(readJson(LOCAL_KEY));
     return () => this.listeners.delete(cb);
   }
 
   async exists() {
-    return this.read() !== null;
+    return readJson(LOCAL_KEY) !== null;
   }
 
   async create(data) {
@@ -84,9 +93,56 @@ class LocalStore {
   }
 
   async update(fn) {
-    const next = fn(this.read());
+    const next = fn(readJson(LOCAL_KEY));
     localStorage.setItem(LOCAL_KEY, JSON.stringify({ ...next, updatedAt: Date.now() }));
     this.emit();
+  }
+
+  // ---- Uso diario ----
+
+  usageKey(profileId, date) {
+    return `mytube:usage:${profileId}:${date}`;
+  }
+
+  emitUsage(key) {
+    const data = readJson(key) || {};
+    (this.usageListeners.get(key) || new Set()).forEach((cb) => cb(data));
+  }
+
+  changeUsage(profileId, date, fn) {
+    const key = this.usageKey(profileId, date);
+    const current = readJson(key) || { profileId, date };
+    localStorage.setItem(key, JSON.stringify(fn(current)));
+    this.emitUsage(key);
+  }
+
+  subscribeUsage(profileId, date, cb) {
+    const key = this.usageKey(profileId, date);
+    if (!this.usageListeners.has(key)) this.usageListeners.set(key, new Set());
+    this.usageListeners.get(key).add(cb);
+    cb(readJson(key) || {});
+    return () => this.usageListeners.get(key).delete(cb);
+  }
+
+  async getUsage(profileId, date) {
+    return readJson(this.usageKey(profileId, date)) || {};
+  }
+
+  async addUsage(profileId, date, seconds) {
+    this.changeUsage(profileId, date, (u) => ({ ...u, seconds: (u.seconds || 0) + seconds }));
+  }
+
+  async addHistory(profileId, date, entry) {
+    this.changeUsage(profileId, date, (u) => ({ ...u, history: [...(u.history || []), entry].slice(-300) }));
+  }
+
+  async grantUsage(profileId, date, { bonusSeconds = 0, overrideUntil, unlimited }) {
+    this.changeUsage(profileId, date, (u) => ({
+      ...u,
+      bonusSeconds: (u.bonusSeconds || 0) + bonusSeconds,
+      ...(overrideUntil !== undefined ? { overrideUntil } : {}),
+      ...(unlimited !== undefined ? { unlimited } : {}),
+    }));
   }
 }
 
@@ -119,20 +175,25 @@ class FirebaseStore {
 
   async ref() {
     const { db, fs } = await loadFirebase();
-    return { fs, ref: fs.doc(db, 'families', this.familyId) };
+    return { db, fs, ref: fs.doc(db, 'families', this.familyId) };
   }
 
-  subscribe(cb, onError) {
+  async usageRef(profileId, date) {
+    const { db, fs } = await loadFirebase();
+    return { fs, ref: fs.doc(db, 'families', this.familyId, 'usage', `${profileId}_${date}`) };
+  }
+
+  listen(refPromise, cb, onError, skipMissingFromCache) {
     let unsubscribe = () => {};
     let cancelled = false;
-    this.ref()
+    refPromise
       .then(({ fs, ref }) => {
         if (cancelled) return;
         unsubscribe = fs.onSnapshot(
           ref,
           (snap) => {
             // La caché offline puede no tener aún el documento: esperamos al servidor.
-            if (!snap.exists() && snap.metadata.fromCache) return;
+            if (skipMissingFromCache && !snap.exists() && snap.metadata.fromCache) return;
             cb(snap.exists() ? snap.data() : null);
           },
           (err) => onError && onError(err),
@@ -143,6 +204,10 @@ class FirebaseStore {
       cancelled = true;
       unsubscribe();
     };
+  }
+
+  subscribe(cb, onError) {
+    return this.listen(this.ref(), cb, onError, true);
   }
 
   async exists() {
@@ -157,13 +222,45 @@ class FirebaseStore {
   }
 
   async update(fn) {
-    const { fs, ref } = await this.ref();
-    const { db } = await loadFirebase();
+    const { db, fs, ref } = await this.ref();
     await fs.runTransaction(db, async (tx) => {
       const snap = await tx.get(ref);
       const next = fn(snap.exists() ? snap.data() : null);
       tx.set(ref, { ...next, updatedAt: Date.now() });
     });
+  }
+
+  // ---- Uso diario ----
+
+  subscribeUsage(profileId, date, cb, onError) {
+    return this.listen(this.usageRef(profileId, date), (data) => cb(data || {}), onError, false);
+  }
+
+  async getUsage(profileId, date) {
+    const { fs, ref } = await this.usageRef(profileId, date);
+    const snap = await fs.getDoc(ref);
+    return snap.exists() ? snap.data() : {};
+  }
+
+  async mergeUsage(profileId, date, fields) {
+    const { fs, ref } = await this.usageRef(profileId, date);
+    await fs.setDoc(ref, { profileId, date, ...fields(fs) }, { merge: true });
+  }
+
+  addUsage(profileId, date, seconds) {
+    return this.mergeUsage(profileId, date, (fs) => ({ seconds: fs.increment(seconds) }));
+  }
+
+  addHistory(profileId, date, entry) {
+    return this.mergeUsage(profileId, date, (fs) => ({ history: fs.arrayUnion(entry) }));
+  }
+
+  grantUsage(profileId, date, { bonusSeconds = 0, overrideUntil, unlimited }) {
+    return this.mergeUsage(profileId, date, (fs) => ({
+      bonusSeconds: fs.increment(bonusSeconds),
+      ...(overrideUntil !== undefined ? { overrideUntil } : {}),
+      ...(unlimited !== undefined ? { unlimited } : {}),
+    }));
   }
 }
 

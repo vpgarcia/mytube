@@ -8,11 +8,21 @@ service cloud.firestore {
     match /families/{familyId} {
       allow get: if familyId.size() == 16;
       allow create, update: if familyId.size() == 16
-        && request.resource.data.keys().hasOnly(['pinHash', 'videos', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['pinHash', 'videos', 'folders', 'profiles', 'updatedAt'])
         && request.resource.data.pinHash is string
         && request.resource.data.videos is list
-        && request.resource.data.videos.size() <= 500;
+        && request.resource.data.videos.size() <= 1000;
       allow list, delete: if false;
+
+      // Uso diario de cada perfil: tiempo visto, tiempo extra e historial.
+      match /usage/{usageId} {
+        allow get: if familyId.size() == 16;
+        allow create, update: if familyId.size() == 16
+          && usageId.size() <= 64
+          && request.resource.data.keys().hasOnly(['profileId', 'date', 'seconds', 'bonusSeconds', 'overrideUntil', 'unlimited', 'history'])
+          && (!('history' in request.resource.data) || request.resource.data.history.size() <= 500);
+        allow list, delete: if false;
+      }
     }
   }
 }

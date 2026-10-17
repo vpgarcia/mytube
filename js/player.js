@@ -8,6 +8,16 @@
 // Excepción: iOS no deja empezar un video con sonido sin un toque real
 // dentro del iframe. Mientras el video no ha empezado ("waiting"), el escudo
 // deja libre solo el centro, donde está el botón grande de play de YouTube.
+//
+// El contexto que recibe openPlayer() decide la lista y recibe los eventos:
+//   list()                  videos de la vista actual, en orden
+//   onClose()               el niño ha vuelto atrás
+//   autoplay()              si al terminar se pasa solo al siguiente
+//   resumeAt(video)         segundo en el que retomar el video
+//   saveResume(video, s)    guarda la posición (null = visto entero)
+//   onWatch(seconds)        cada segundo de reproducción
+//   onSessionEnd(entry)     resumen al dejar un video (para el historial)
+//   onBroken(video)         el video ya no se puede ver
 
 import { loadPlayerApi, thumbnailUrl } from './youtube.js';
 
@@ -19,8 +29,11 @@ const ERRORS = {
   150: 'El autor de este video no permite verlo fuera de YouTube.',
   153: 'YouTube no ha podido cargar el reproductor.',
 };
+const BROKEN_ERRORS = new Set([2, 100, 101, 150]);
 const LOAD_TIMEOUT_MS = 15000;
 const CONTROLS_HIDE_MS = 3000;
+const AUTOPLAY_COUNTDOWN = 5;
+const MIN_SESSION_SECONDS = 5;
 
 const screen = document.getElementById('player');
 const frame = document.getElementById('player-frame');
@@ -28,9 +41,9 @@ const shield = document.getElementById('shield');
 const seek = document.getElementById('seek');
 const endScreen = document.getElementById('end-screen');
 const endMore = document.getElementById('end-more');
+const endCountdown = document.getElementById('end-countdown');
 const errorScreen = document.getElementById('error-screen');
 const errorText = document.getElementById('error-text');
-
 const prevBtn = document.getElementById('prev-btn');
 const nextBtn = document.getElementById('next-btn');
 
@@ -39,14 +52,18 @@ let ready = false;
 let current = null;
 let context = null;
 let progressTimer = null;
+let watchTimer = null;
 let hideTimer = null;
 let loadTimer = null;
+let countdownTimer = null;
 let seeking = false;
+let session = null;
 
 function setMode(mode) {
   screen.dataset.mode = mode;
   endScreen.hidden = mode !== 'ended';
   errorScreen.hidden = mode !== 'error';
+  if (mode !== 'ended') stopCountdown();
   if (mode === 'playing') scheduleHideControls();
   else showControls(false);
 }
@@ -64,7 +81,15 @@ function scheduleHideControls() {
   }, CONTROLS_HIDE_MS);
 }
 
+function endSession() {
+  if (session && session.seconds >= MIN_SESSION_SECONDS && context) {
+    context.onSessionEnd({ videoId: session.video.id, title: session.video.title, at: session.at, seconds: session.seconds });
+  }
+  session = null;
+}
+
 function showError(message) {
+  endSession();
   errorText.textContent = message;
   setMode('error');
   destroy();
@@ -72,6 +97,7 @@ function showError(message) {
 
 function destroy() {
   clearInterval(progressTimer);
+  clearInterval(watchTimer);
   clearTimeout(loadTimer);
   if (player) {
     try {
@@ -85,32 +111,31 @@ function destroy() {
   frame.replaceChildren();
 }
 
+function currentTime() {
+  try {
+    return player?.getCurrentTime?.() || 0;
+  } catch {
+    return 0;
+  }
+}
+
 function updateProgress() {
   if (!player || seeking || typeof player.getDuration !== 'function') return;
   const duration = player.getDuration() || 0;
   if (duration > 0) {
     seek.max = String(duration);
-    seek.value = String(player.getCurrentTime() || 0);
+    seek.value = String(currentTime());
     seek.style.setProperty('--progress', `${(seek.value / duration) * 100}%`);
   }
 }
 
-function renderMore() {
-  const others = context.others(current).sort(() => Math.random() - 0.5).slice(0, 4);
-  endMore.replaceChildren(
-    ...others.map((video) => {
-      const btn = document.createElement('button');
-      btn.className = 'more-tile';
-      const img = document.createElement('img');
-      img.src = thumbnailUrl(video.id);
-      img.alt = '';
-      const title = document.createElement('span');
-      title.textContent = video.title;
-      btn.append(img, title);
-      btn.addEventListener('click', () => openPlayer(video, context));
-      return btn;
-    }),
-  );
+// Cuenta el tiempo de reproducción real (no el tiempo en pausa).
+function watchTick() {
+  if (screen.dataset.mode !== 'playing' || !current) return;
+  if (!session || session.video.id !== current.id) session = { video: current, at: Date.now(), seconds: 0 };
+  session.seconds += 1;
+  if (session.seconds % 5 === 0) context.saveResume(current, currentTime());
+  context.onWatch(1);
 }
 
 function neighbour(delta) {
@@ -132,18 +157,75 @@ function goTo(delta) {
   if (video) openPlayer(video, context);
 }
 
+function renderMore() {
+  const others = context
+    .list()
+    .filter((v) => v.id !== current?.id)
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 4);
+  endMore.replaceChildren(
+    ...others.map((video) => {
+      const btn = document.createElement('button');
+      btn.className = 'more-tile';
+      const img = document.createElement('img');
+      img.src = thumbnailUrl(video.id);
+      img.alt = '';
+      const title = document.createElement('span');
+      title.textContent = video.title;
+      btn.append(img, title);
+      btn.addEventListener('click', () => openPlayer(video, context));
+      return btn;
+    }),
+  );
+}
+
+function stopCountdown() {
+  clearInterval(countdownTimer);
+  countdownTimer = null;
+  endCountdown.hidden = true;
+}
+
+function startCountdown(next) {
+  let left = AUTOPLAY_COUNTDOWN;
+  const render = () => {
+    endCountdown.textContent = `Siguiente video en ${left}…`;
+  };
+  render();
+  endCountdown.hidden = false;
+  countdownTimer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) {
+      stopCountdown();
+      openPlayer(next, context);
+    } else {
+      render();
+    }
+  }, 1000);
+}
+
+function onEnded() {
+  endSession();
+  context.saveResume(current, null);
+  renderMore();
+  setMode('ended');
+  const next = neighbour(1);
+  if (next && context.autoplay()) startCountdown(next);
+}
+
 export async function openPlayer(video, ctx) {
+  endSession();
   context = ctx;
   current = video;
   seek.value = '0';
   seek.style.setProperty('--progress', '0%');
   updateNav();
+  const start = Math.floor(context.resumeAt(video) || 0);
 
   // Con un reproductor ya en marcha cambiamos solo el video: así iOS deja que
   // empiece sin otro toque, porque el niño ya pulsó play en este reproductor.
   if (player && ready && screen.dataset.mode !== 'error') {
     setMode('loading');
-    player.loadVideoById(video.id);
+    player.loadVideoById({ videoId: video.id, startSeconds: start });
     setTimeout(() => {
       if (current === video && screen.dataset.mode === 'loading') setMode('waiting');
     }, 1500);
@@ -182,6 +264,7 @@ export async function openPlayer(video, ctx) {
       disablekb: 1,
       iv_load_policy: 3,
       cc_load_policy: 0,
+      start,
       origin: location.origin,
     },
     events: {
@@ -194,24 +277,34 @@ export async function openPlayer(video, ctx) {
           if (screen.dataset.mode === 'loading') setMode('waiting');
         }, 800);
         progressTimer = setInterval(updateProgress, 250);
+        watchTimer = setInterval(watchTick, 1000);
       },
       onStateChange: (e) => {
         const S = YT.PlayerState;
         if (e.data === S.PLAYING) setMode('playing');
         else if (e.data === S.PAUSED && screen.dataset.mode !== 'waiting') setMode('paused');
-        else if (e.data === S.ENDED) {
-          renderMore();
-          setMode('ended');
-        } else if (e.data === S.CUED && screen.dataset.mode === 'loading') setMode('waiting');
+        else if (e.data === S.ENDED) onEnded();
+        else if (e.data === S.CUED && screen.dataset.mode === 'loading') setMode('waiting');
       },
-      onError: (e) => showError(ERRORS[e.data] || 'Este video no se puede ver ahora.'),
+      onError: (e) => {
+        if (BROKEN_ERRORS.has(e.data) && current) context.onBroken(current);
+        showError(ERRORS[e.data] || 'Este video no se puede ver ahora.');
+      },
     },
   });
 }
 
-export function closePlayer() {
+// Detiene el video sin volver a la lista (p. ej. al acabarse el tiempo).
+export function stopPlayer() {
+  if (current && screen.dataset.mode !== 'ended') context.saveResume(current, currentTime());
+  endSession();
+  stopCountdown();
   destroy();
   current = null;
+}
+
+export function closePlayer() {
+  stopPlayer();
   if (context) context.onClose();
 }
 
@@ -229,6 +322,7 @@ screen.addEventListener('click', (e) => {
   else if (action === 'prev') goTo(-1);
   else if (action === 'next') goTo(1);
   else if (action === 'replay' && player) {
+    stopCountdown();
     player.seekTo(0, true);
     player.playVideo();
     setMode('playing');
@@ -251,5 +345,9 @@ seek.addEventListener('change', () => {
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && player && typeof player.pauseVideo === 'function') player.pauseVideo();
+  if (document.hidden && player && typeof player.pauseVideo === 'function') {
+    player.pauseVideo();
+    if (current) context.saveResume(current, currentTime());
+    endSession();
+  }
 });

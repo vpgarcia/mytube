@@ -48,10 +48,27 @@
     </form>
   </section>
 
+  <!-- Elegir perfil -->
+  <section id="profiles" class="screen center" hidden>
+    <div class="profiles-wrap">
+      <h1>¿Quién va a ver videos?</h1>
+      <div class="profile-grid" id="profile-grid"></div>
+    </div>
+    <button class="lock" aria-label="Modo padre (mantén pulsado)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z"/></svg>
+      <svg class="ring" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22"/></svg>
+    </button>
+  </section>
+
   <!-- Pantalla del niño -->
   <section id="home" class="screen" hidden>
     <header class="home-header">
-      <h1>Mis videos</h1>
+      <button class="home-back" id="home-back" data-action="folder-back" aria-label="Volver" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5 8 12l7.5 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="avatar-btn" id="avatar-btn" data-action="switch-profile" aria-label="Cambiar de perfil" hidden></button>
+      <h1 id="home-title">Mis videos</h1>
+      <span class="time-left" id="time-left" hidden></span>
     </header>
     <main id="grid" class="grid"></main>
     <div id="empty" class="empty" hidden>
@@ -59,7 +76,21 @@
       <p>Todavía no hay videos.</p>
       <p class="muted">Un adulto puede añadirlos desde el modo padre.</p>
     </div>
-    <button id="lock" class="lock" aria-label="Modo padre (mantén pulsado)">
+    <button class="lock" aria-label="Modo padre (mantén pulsado)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z"/></svg>
+      <svg class="ring" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22"/></svg>
+    </button>
+  </section>
+
+  <!-- Descanso: se acabó el tiempo o no es horario de videos -->
+  <section id="rest" class="screen center" hidden>
+    <div class="rest-box">
+      <div class="rest-emoji" id="rest-emoji">🌙</div>
+      <h1 id="rest-title">¡Hasta mañana!</h1>
+      <p id="rest-text">Por hoy ya has visto todos tus videos.</p>
+      <button class="btn big" data-action="switch-profile" id="rest-switch" hidden>Cambiar de perfil</button>
+    </div>
+    <button class="lock" aria-label="Modo padre (mantén pulsado)">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z"/></svg>
       <svg class="ring" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22"/></svg>
     </button>
@@ -98,6 +129,7 @@
         <button class="btn primary big" data-action="replay">Ver otra vez</button>
         <button class="btn big" data-action="close-player">Volver</button>
       </div>
+      <p class="countdown" id="end-countdown" hidden></p>
       <div class="end-more" id="end-more"></div>
     </div>
     <div class="overlay-screen" id="error-screen" hidden>
@@ -114,21 +146,57 @@
       <button class="btn primary" data-action="exit-parent">Listo</button>
     </header>
     <main class="parent-main">
+      <div class="banner warn" id="broken-banner" hidden></div>
+      <div class="banner warn" id="rules-banner" hidden>Para el límite de tiempo y el historial hay que
+        actualizar las reglas de Firebase (ver README, paso 2.3).</div>
+
       <form class="card" id="add-form">
-        <h2>Añadir video</h2>
+        <h2>Añadir videos</h2>
         <div class="add-row">
           <input id="add-input" class="input" type="text" inputmode="url" autocomplete="off"
-                 spellcheck="false" placeholder="Pega aquí el enlace de YouTube" required>
+                 spellcheck="false" placeholder="Enlace de un video, una lista o un canal" required>
           <button class="btn primary" type="submit" id="add-btn">Añadir</button>
         </div>
+        <div class="add-options" id="add-options"></div>
         <p class="form-msg" id="add-msg" role="alert"></p>
-        <p class="note">En la app de YouTube: <b>Compartir → Copiar enlace</b> y pégalo aquí.</p>
+        <p class="note">En la app de YouTube: <b>Compartir → Copiar enlace</b> y pégalo aquí. Con una
+          <b>lista de reproducción</b> se añaden todos sus videos. Para un canal, usa su enlace
+          <code>youtube.com/channel/UC…</code> o una de sus listas.</p>
       </form>
 
       <section class="card">
-        <h2>Videos <span class="count" id="video-count"></span></h2>
+        <div class="card-head">
+          <h2>Videos <span class="count" id="video-count"></span></h2>
+          <button class="btn small" data-action="check-videos" id="check-btn">Comprobar</button>
+        </div>
+        <div class="filter-row" id="video-filter"></div>
         <ul class="video-list" id="video-list"></ul>
         <p class="muted" id="video-list-empty" hidden>Aún no has añadido ningún video.</p>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Carpetas</h2>
+          <button class="btn small" data-action="new-folder">Nueva carpeta</button>
+        </div>
+        <ul class="simple-list" id="folder-list"></ul>
+        <p class="muted" id="folder-list-empty">Agrupa los videos en carpetas (dinosaurios, canciones…).
+          Sin carpetas, el niño ve todos los videos juntos.</p>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Perfiles</h2>
+          <button class="btn small" data-action="new-profile">Nuevo perfil</button>
+        </div>
+        <ul class="simple-list" id="profile-list"></ul>
+        <p class="note">Cada perfil tiene su lista, su límite de tiempo, su horario y la reproducción continua.</p>
+      </section>
+
+      <section class="card">
+        <h2>Actividad</h2>
+        <div class="filter-row" id="activity-tabs"></div>
+        <div id="activity"></div>
       </section>
 
       <section class="card" data-sync-only>
@@ -146,6 +214,31 @@
         <h2>Otros dispositivos</h2>
         <p class="muted">Modo local: la lista solo está en este dispositivo. Para gestionarla desde
           tu móvil, activa la sincronización con Firebase (instrucciones en el README).</p>
+      </section>
+
+      <section class="card">
+        <h2>Este dispositivo</h2>
+        <label class="field"><span class="field-label">Perfil que se usa aquí</span>
+          <select class="input" id="device-profile"></select></label>
+        <p class="note">Si fijas un perfil, el niño no puede cambiarse a otro desde este dispositivo.</p>
+      </section>
+
+      <section class="card" data-sync-only>
+        <h2>Añadir desde el iPhone con «Compartir»</h2>
+        <p class="muted">Crea un atajo una sola vez y podrás añadir videos desde la app de YouTube con
+          <b>Compartir → MyTube</b>.</p>
+        <ol class="steps">
+          <li>Abre la app <b>Atajos</b> → <b>+</b>. Ponle de nombre <b>MyTube</b>.</li>
+          <li>Pulsa <b>ⓘ</b> (abajo) → activa <b>Mostrar en hoja para compartir</b>.</li>
+          <li>Arriba, en «Recibir», elige solo <b>URL</b> y <b>Texto</b>.</li>
+          <li>Añade la acción <b>Codificar URL</b> (usa «Entrada del atajo»).</li>
+          <li>Añade la acción <b>Texto</b> y pega esto; al final, toca <b>Variable</b> → <b>URL codificada</b>:
+            <div class="family-code small-code" id="shortcut-url"></div>
+            <button class="btn small" type="button" data-action="copy-shortcut">Copiar</button></li>
+          <li>Añade la acción <b>Abrir URL</b> (usa «Texto»). Listo.</li>
+        </ol>
+        <p class="note">Se abrirá MyTube en Safari, te pedirá el PIN y añadirá el video. La primera vez
+          puede pedirte que confirmes la lista.</p>
       </section>
 
       <section class="card">

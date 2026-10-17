@@ -3,16 +3,25 @@
 App para que un niño vea **solo** los videos de YouTube que elige un adulto.
 Funciona en iPad, iPhone y Android como app instalada (PWA), sin App Store.
 
-- **Pantalla del niño:** miniaturas grandes de los videos aprobados. Sin buscador,
-  sin videos relacionados, sin enlaces a YouTube.
+- **Pantalla del niño:** miniaturas grandes de los videos aprobados, agrupados en carpetas con
+  dibujos. Sin buscador, sin videos relacionados, sin enlaces a YouTube.
 - **Reproductor bloqueado:** una capa invisible impide tocar el logo, el título o las
-  sugerencias de YouTube. Al terminar, se muestra una pantalla propia con otros videos
-  de la lista.
+  sugerencias de YouTube. Botones propios: anterior, play/pausa, siguiente y barra de avance.
+- **Reproducción continua** (opcional por perfil): al terminar, cuenta atrás y siguiente video.
+- **Sigue donde lo dejó:** cada video se retoma en el punto en que se cerró.
+- **Perfiles:** varios niños, cada uno con su lista, su dibujo, su límite y su horario.
+- **Límite de tiempo diario y horario permitido:** al acabarse, pantalla de «¡Hasta mañana!».
+  Con el PIN se puede dar tiempo extra para ese día.
+- **Actividad:** minutos por día de la última semana y qué videos ha visto hoy.
 - **Modo padre:** se entra manteniendo pulsado el candado (abajo a la derecha) e
-  introduciendo un PIN. Desde ahí se añaden, ordenan, renombran y quitan videos.
+  introduciendo un PIN. Desde ahí se añaden videos (sueltos, listas de reproducción enteras o
+  canales `youtube.com/channel/UC…`), se ordenan, se programan para una fecha y se organizan.
+- **Videos caídos:** la app detecta los videos borrados o que ya no se pueden incrustar, los
+  oculta al niño y avisa en el modo padre.
 - **Sincronización:** la lista se gestiona desde el móvil del adulto y aparece al
   instante en el iPad del niño (requiere Firebase, ver abajo).
-- **Android:** desde la app de YouTube, *Compartir → MyTube* añade el video directamente.
+- **Compartir desde YouTube:** en Android, *Compartir → MyTube*. En iPhone, con un atajo
+  (instrucciones dentro del modo padre).
 
 ## Puesta en marcha
 
@@ -33,7 +42,8 @@ se crea.
 2. En el menú: **Compilación → Firestore Database → Crear base de datos**.
    Elige una ubicación cercana (p. ej. `eur3`) y **modo de producción**.
 3. En la pestaña **Reglas** de Firestore, pega el contenido de
-   [`firestore.rules`](firestore.rules) y pulsa **Publicar**.
+   [`firestore.rules`](firestore.rules) y pulsa **Publicar**. Si actualizas la app y el
+   archivo de reglas ha cambiado, vuelve a pegarlo.
 4. Ve a **Configuración del proyecto** (rueda dentada) → **Tus apps** → icono **`</>`**
    (Web). Ponle un nombre y regístrala (no hace falta Hosting).
 5. Copia el objeto `firebaseConfig` que aparece y pégalo en
@@ -85,9 +95,13 @@ python3 -m http.server 8000
 | Archivo | Qué hace |
 |---|---|
 | `index.html` | Todas las pantallas |
-| `js/app.js` | Navegación, modo padre, PIN, lista |
+| `js/app.js` | Pantalla del niño, perfiles, control del tiempo |
+| `js/parent.js` | Modo padre: videos, carpetas, perfiles, actividad |
+| `js/model.js` | Reglas: qué ve cada perfil, límite y horario |
+| `js/ui.js` | Ventanas, PIN y piezas de interfaz |
+| `js/state.js` | Estado compartido |
 | `js/player.js` | Reproductor con capa de bloqueo y controles propios |
 | `js/store.js` | Guardado local o en Firebase |
-| `js/youtube.js` | Leer enlaces de YouTube, título y miniatura |
+| `js/youtube.js` | Leer enlaces, listas, título y miniatura de YouTube |
 | `js/config.js` | Configuración de Firebase |
 | `sw.js` | Caché para que funcione como app instalada |

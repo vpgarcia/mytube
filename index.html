@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <!-- YouTube rechaza reproducir embebidos sin Referer (error 153). -->
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="theme-color" content="#ff5a5f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MyTube">
+  <title>MyTube</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Cargando -->
+  <section id="loading" class="screen center">
+    <div class="spinner" aria-label="Cargando"></div>
+  </section>
+
+  <!-- Primera configuración -->
+  <section id="setup" class="screen center" hidden>
+    <div class="card narrow">
+      <img src="icons/icon.svg" alt="" class="logo">
+      <h1>MyTube</h1>
+      <p class="muted">Solo los videos de YouTube que tú elijas.</p>
+      <button class="btn primary big" data-action="create">Crear una lista nueva</button>
+      <button class="btn big" data-action="show-join" data-sync-only>Ya tengo una lista en otro dispositivo</button>
+      <p class="note" data-local-only>Modo local: la lista se guardará solo en este dispositivo.
+        Para compartirla con tu móvil, activa la sincronización (ver README).</p>
+    </div>
+  </section>
+
+  <!-- Unirse a una lista existente -->
+  <section id="join" class="screen center" hidden>
+    <form class="card narrow" id="join-form">
+      <h1>Unirse a una lista</h1>
+      <p class="muted">Escribe el código que aparece en el modo padre del otro dispositivo.</p>
+      <input id="join-code" class="input code" autocomplete="off" autocapitalize="characters"
+             spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="19" required>
+      <p class="form-msg" id="join-msg" role="alert"></p>
+      <button class="btn primary big" type="submit">Unirme</button>
+      <button class="btn link" type="button" data-action="back-setup">Volver</button>
+    </form>
+  </section>
+
+  <!-- Pantalla del niño -->
+  <section id="home" class="screen" hidden>
+    <header class="home-header">
+      <h1>Mis videos</h1>
+    </header>
+    <main id="grid" class="grid"></main>
+    <div id="empty" class="empty" hidden>
+      <div class="empty-icon">📺</div>
+      <p>Todavía no hay videos.</p>
+      <p class="muted">Un adulto puede añadirlos desde el modo padre.</p>
+    </div>
+    <button id="lock" class="lock" aria-label="Modo padre (mantén pulsado)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z"/></svg>
+      <svg class="ring" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22"/></svg>
+    </button>
+  </section>
+
+  <!-- Reproductor -->
+  <section id="player" class="screen" hidden>
+    <div class="player-frame" id="player-frame"></div>
+    <div class="shield" id="shield">
+      <div></div><div></div><div></div>
+      <div></div><div class="hole"></div><div></div>
+      <div></div><div></div><div></div>
+    </div>
+    <div class="start-hint" id="start-hint">Toca ▶ para empezar</div>
+    <div class="controls" id="controls">
+      <button class="ctrl close" data-action="close-player" aria-label="Volver">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5 8 12l7.5 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="bottom-bar">
+        <button class="ctrl play" data-action="toggle-play" aria-label="Reproducir o pausar">
+          <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+        </button>
+        <input type="range" id="seek" class="seek" min="0" max="100" step="0.1" value="0" aria-label="Posición">
+      </div>
+    </div>
+    <div class="overlay-screen" id="end-screen" hidden>
+      <h2>¡Fin! 🎉</h2>
+      <div class="end-actions">
+        <button class="btn primary big" data-action="replay">Ver otra vez</button>
+        <button class="btn big" data-action="close-player">Volver</button>
+      </div>
+      <div class="end-more" id="end-more"></div>
+    </div>
+    <div class="overlay-screen" id="error-screen" hidden>
+      <h2>Ups 😕</h2>
+      <p id="error-text">Este video no se puede ver aquí.</p>
+      <button class="btn primary big" data-action="close-player">Volver</button>
+    </div>
+  </section>
+
+  <!-- Modo padre -->
+  <section id="parent" class="screen" hidden>
+    <header class="parent-header">
+      <h1>Modo padre</h1>
+      <button class="btn primary" data-action="exit-parent">Listo</button>
+    </header>
+    <main class="parent-main">
+      <form class="card" id="add-form">
+        <h2>Añadir video</h2>
+        <div class="add-row">
+          <input id="add-input" class="input" type="text" inputmode="url" autocomplete="off"
+                 spellcheck="false" placeholder="Pega aquí el enlace de YouTube" required>
+          <button class="btn primary" type="submit" id="add-btn">Añadir</button>
+        </div>
+        <p class="form-msg" id="add-msg" role="alert"></p>
+        <p class="note">En la app de YouTube: <b>Compartir → Copiar enlace</b> y pégalo aquí.</p>
+      </form>
+
+      <section class="card">
+        <h2>Videos <span class="count" id="video-count"></span></h2>
+        <ul class="video-list" id="video-list"></ul>
+        <p class="muted" id="video-list-empty" hidden>Aún no has añadido ningún video.</p>
+      </section>
+
+      <section class="card" data-sync-only>
+        <h2>Otros dispositivos</h2>
+        <p class="muted">Abre este enlace en el iPad del niño o en tu móvil para usar la misma lista.
+          Los cambios aparecen al instante en todos.</p>
+        <div class="family-code" id="family-code"></div>
+        <div class="row">
+          <button class="btn" data-action="share-link">Compartir enlace</button>
+          <button class="btn" data-action="copy-code">Copiar código</button>
+        </div>
+      </section>
+
+      <section class="card" data-local-only>
+        <h2>Otros dispositivos</h2>
+        <p class="muted">Modo local: la lista solo está en este dispositivo. Para gestionarla desde
+          tu móvil, activa la sincronización con Firebase (instrucciones en el README).</p>
+      </section>
+
+      <section class="card">
+        <h2>Ajustes</h2>
+        <div class="row">
+          <button class="btn" data-action="change-pin">Cambiar PIN</button>
+          <button class="btn danger" data-action="unlink" data-sync-only>Desvincular este dispositivo</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Que no pueda salir de la app</h2>
+        <p><b>iPad / iPhone:</b> Ajustes → Accesibilidad → Acceso guiado → activar. Abre MyTube y
+          pulsa tres veces el botón lateral (o de inicio) para bloquearlo dentro de la app.</p>
+        <p><b>Android:</b> Ajustes → Seguridad → Fijar aplicaciones (o «Fijar pantalla»). Abre MyTube,
+          ve a Recientes, toca el icono de la app y elige «Fijar».</p>
+      </section>
+    </main>
+  </section>
+
+  <div id="modal-root"></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

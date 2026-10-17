@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Cada familia es un documento cuyo ID es un código aleatorio de 16
+// caracteres. Solo quien conoce el código puede leer o modificar su lista;
+// nadie puede listar ni borrar familias.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /families/{familyId} {
+      allow get: if familyId.size() == 16;
+      allow create, update: if familyId.size() == 16
+        && request.resource.data.keys().hasOnly(['pinHash', 'videos', 'updatedAt'])
+        && request.resource.data.pinHash is string
+        && request.resource.data.videos is list
+        && request.resource.data.videos.size() <= 500;
+      allow list, delete: if false;
+    }
+  }
+}

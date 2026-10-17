@@ -115,7 +115,10 @@ export function dialog({ title, content = [], actions }) {
 }
 
 export function field(label, input, hint) {
-  return h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input, hint ? h('span', { class: 'note' }, hint) : null);
+  // Solo un control simple puede ir dentro de <label>: con varios botones o
+  // casillas dentro, Safari manda cada toque al primero de ellos.
+  const simple = ['INPUT', 'SELECT', 'TEXTAREA'].includes(input.tagName);
+  return h(simple ? 'label' : 'div', { class: 'field' }, h('span', { class: 'field-label' }, label), input, hint ? h('span', { class: 'note' }, hint) : null);
 }
 
 export function select(options, value) {
@@ -129,27 +132,32 @@ export function select(options, value) {
 // Selector de emoji: devuelve un elemento con la propiedad `value`.
 export function emojiPicker(options, value) {
   const wrap = h('div', { class: 'emoji-picker', role: 'radiogroup' });
-  wrap.value = value || options[0];
-  const render = () => {
-    wrap.replaceChildren(
-      ...options.map((e) =>
-        h(
-          'button',
-          {
-            type: 'button',
-            class: `emoji-option ${e === wrap.value ? 'selected' : ''}`,
-            'aria-label': e,
-            onclick: () => {
-              wrap.value = e;
-              render();
-            },
-          },
-          e,
-        ),
-      ),
-    );
-  };
-  render();
+  wrap.value = options.includes(value) ? value : options[0];
+  const buttons = options.map((e) =>
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'emoji-option',
+        role: 'radio',
+        'aria-label': e,
+        onclick: (ev) => {
+          ev.preventDefault();
+          wrap.value = e;
+          mark();
+        },
+      },
+      e,
+    ),
+  );
+  const mark = () =>
+    buttons.forEach((b, i) => {
+      const on = options[i] === wrap.value;
+      b.classList.toggle('selected', on);
+      b.setAttribute('aria-checked', String(on));
+    });
+  wrap.append(...buttons);
+  mark();
   return wrap;
 }
 

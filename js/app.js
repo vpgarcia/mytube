@@ -323,11 +323,15 @@ function reportShareProblem() {
   const received = state.shareProblem;
   state.shareProblem = null;
   dialog({
-    title: 'No se reconoce el enlace',
-    content: [
-      h('p', { class: 'muted' }, 'MyTube ha recibido esto, pero no parece un enlace de un video de YouTube:'),
-      h('div', { class: 'family-code small-code' }, received),
-    ],
+    title: received ? 'No se reconoce el enlace' : 'No ha llegado ningún video',
+    content: received
+      ? [
+          h('p', { class: 'muted' }, 'MyTube ha recibido esto, pero no parece un enlace de un video de YouTube:'),
+          h('div', { class: 'family-code small-code' }, received),
+        ]
+      : [
+          h('p', { class: 'muted' }, 'El atajo ha abierto MyTube, pero sin el enlace del video. Revisa que en el atajo, detrás de «url=», esté la variable «Entrada del atajo», y que en «Recibir» estén marcados URL y Texto.'),
+        ],
     actions: [{ label: 'Entendido', value: true, class: 'primary' }],
   });
 }
@@ -358,7 +362,7 @@ function connect(familyId) {
         if (screen() === 'parent') renderParent();
         else goHome();
         if (state.pendingShare) unlockParent();
-        else if (state.shareProblem) reportShareProblem();
+        else if (state.shareProblem !== null) reportShareProblem();
         return;
       }
       if (state.profileId && !profiles().some((p) => p.id === state.profileId)) state.profileId = null;
@@ -525,6 +529,8 @@ function init() {
     const candidate = [shared, whole].find((t) => parseInput(t));
     if (candidate) state.pendingShare = candidate === whole ? whole.slice(whole.indexOf('url=') + 4) : candidate;
     else state.shareProblem = shared;
+  } else if (params.has('url')) {
+    state.shareProblem = '';
   }
   if (params.toString()) history.replaceState(null, '', location.pathname);
 

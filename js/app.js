@@ -330,7 +330,7 @@ function reportShareProblem() {
           h('div', { class: 'family-code small-code' }, received),
         ]
       : [
-          h('p', { class: 'muted' }, 'El atajo ha abierto MyTube, pero sin el enlace del video. Revisa que en el atajo, detrás de «url=», esté la variable «Entrada del atajo», y que en «Recibir» estén marcados URL y Texto.'),
+          h('p', { class: 'muted' }, 'El atajo ha abierto MyTube, pero sin el enlace del video. Revisa el atajo con los pasos de «Añadir desde el iPhone con Compartir», en el modo padre.'),
         ],
     actions: [{ label: 'Entendido', value: true, class: 'primary' }],
   });
@@ -497,6 +497,32 @@ setInterval(() => {
   refreshAccess();
 }, 30000);
 
+function safeDecode(text) {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
+// El atajo de iPhone manda el enlace en Base64 (si no, «Abrir URL» lo detecta
+// como una segunda dirección y abre YouTube). Aceptamos también el enlace tal cual.
+function decodeShared(raw) {
+  const text = safeDecode(raw).trim();
+  if (parseInput(text)) return text;
+  const b64 = text.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  if (/^[A-Za-z0-9+/]+=*$/.test(b64)) {
+    try {
+      const bytes = Uint8Array.from(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')), (c) => c.charCodeAt(0));
+      const decoded = safeDecode(new TextDecoder().decode(bytes)).trim();
+      if (parseInput(decoded)) return decoded;
+    } catch {
+      // No era Base64.
+    }
+  }
+  return text;
+}
+
 function init() {
   document.body.classList.toggle('sync', store.syncEnabled);
   setupLocks();
@@ -508,26 +534,11 @@ function init() {
   const params = new URLSearchParams(location.search);
   const joinCode = store.normalizeFamilyCode(params.get('familia'));
   // Compartir un video desde YouTube (Android o el atajo de iPhone) abre MyTube con el enlace.
-  // El atajo de iPhone puede mandar el enlace sin codificar: tomamos todo lo que
-  // va detrás de "url=", aunque contenga "&" o "?".
-  const rawUrl = location.search.match(/[?&]url=(.*)$/)?.[1];
-  let sharedUrl = rawUrl;
-  try {
-    sharedUrl = rawUrl && decodeURIComponent(rawUrl);
-  } catch {
-    // Ya venía sin codificar.
-  }
-  const shared = sharedUrl || params.get('text') || params.get('title');
+  // Tomamos todo lo que va detrás de "url=", aunque contenga "&" o "?".
+  const rawUrl = location.search.match(/[?&]url=(.*)$/)?.[1] || '';
+  const shared = rawUrl ? decodeShared(rawUrl) : params.get('text') || params.get('title');
   if (shared) {
-    // Si iOS cambia el formato, buscamos un enlace de YouTube en toda la dirección.
-    let whole = location.href;
-    try {
-      whole = decodeURIComponent(location.href);
-    } catch {
-      // Se queda sin decodificar.
-    }
-    const candidate = [shared, whole].find((t) => parseInput(t));
-    if (candidate) state.pendingShare = candidate === whole ? whole.slice(whole.indexOf('url=') + 4) : candidate;
+    if (parseInput(shared)) state.pendingShare = shared;
     else state.shareProblem = shared;
   } else if (params.has('url')) {
     state.shareProblem = '';

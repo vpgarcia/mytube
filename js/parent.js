@@ -55,6 +55,7 @@ export function openParent() {
     const shared = state.pendingShare;
     state.pendingShare = null;
     $('add-input').value = shared;
+    window.scrollTo(0, 0);
     addFromInput(shared);
   }
 }

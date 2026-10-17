@@ -1,10 +1,10 @@
-import { parseVideoId, thumbnailUrl, loadPlayerApi } from './youtube.js';
+import { parseInput, thumbnailUrl, loadPlayerApi } from './youtube.js';
 import { openPlayer, stopPlayer } from './player.js';
 import * as store from './store.js';
 import * as model from './model.js';
 import { state, updateVideos, usageError } from './state.js';
 import { openParent, renderParent, grantTime, parentActions } from './parent.js';
-import { $, h, show, screen, toast, hideToast, pinPad, adultCheck, chooseNewPin } from './ui.js';
+import { $, h, show, screen, toast, hideToast, pinPad, adultCheck, chooseNewPin, dialog } from './ui.js';
 
 const LONG_PRESS_MS = 1500;
 const FLUSH_EVERY_SECONDS = 15;
@@ -294,7 +294,7 @@ async function unlockParent() {
   const fromRest = screen() === 'rest' && !state.pendingShare;
   const pin = await pinPad({
     title: 'Modo padre',
-    subtitle: 'Introduce tu PIN',
+    subtitle: state.pendingShare ? 'Introduce tu PIN para añadir el video compartido' : 'Introduce tu PIN',
     validate: async (p) => (await store.hashPin(state.familyId, p)) === state.data?.pinHash,
     onForgot: resetPin,
   });
@@ -316,6 +316,20 @@ async function saveNewPin(pin) {
   const pinHash = await store.hashPin(state.familyId, pin);
   await state.store.update((d) => ({ ...d, pinHash }));
   toast('PIN cambiado');
+}
+
+// Se compartió algo que no parece un enlace de YouTube: lo enseñamos tal cual.
+function reportShareProblem() {
+  const received = state.shareProblem;
+  state.shareProblem = null;
+  dialog({
+    title: 'No se reconoce el enlace',
+    content: [
+      h('p', { class: 'muted' }, 'MyTube ha recibido esto, pero no parece un enlace de un video de YouTube:'),
+      h('div', { class: 'family-code small-code' }, received),
+    ],
+    actions: [{ label: 'Entendido', value: true, class: 'primary' }],
+  });
 }
 
 // ---------- Conexión con la lista ----------
@@ -344,6 +358,7 @@ function connect(familyId) {
         if (screen() === 'parent') renderParent();
         else goHome();
         if (state.pendingShare) unlockParent();
+        else if (state.shareProblem) reportShareProblem();
         return;
       }
       if (state.profileId && !profiles().some((p) => p.id === state.profileId)) state.profileId = null;
@@ -499,7 +514,18 @@ function init() {
     // Ya venía sin codificar.
   }
   const shared = sharedUrl || params.get('text') || params.get('title');
-  if (shared && (parseVideoId(shared) || /youtu/i.test(shared))) state.pendingShare = shared;
+  if (shared) {
+    // Si iOS cambia el formato, buscamos un enlace de YouTube en toda la dirección.
+    let whole = location.href;
+    try {
+      whole = decodeURIComponent(location.href);
+    } catch {
+      // Se queda sin decodificar.
+    }
+    const candidate = [shared, whole].find((t) => parseInput(t));
+    if (candidate) state.pendingShare = candidate === whole ? whole.slice(whole.indexOf('url=') + 4) : candidate;
+    else state.shareProblem = shared;
+  }
   if (params.toString()) history.replaceState(null, '', location.pathname);
 
   const device = store.getDevice();

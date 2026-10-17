@@ -15,6 +15,7 @@ export const state = {
   pendingSeconds: 0, // segundos vistos aún sin guardar
   usageDenied: false, // las reglas de Firebase no permiten guardar el uso
   pendingShare: null, // enlace compartido desde otra app, pendiente de añadir
+  shareProblem: null, // texto compartido que no es un enlace de YouTube
 };
 
 export function updateData(fn) {

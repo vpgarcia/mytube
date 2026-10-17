@@ -489,7 +489,16 @@ function init() {
   const params = new URLSearchParams(location.search);
   const joinCode = store.normalizeFamilyCode(params.get('familia'));
   // Compartir un video desde YouTube (Android o el atajo de iPhone) abre MyTube con el enlace.
-  const shared = params.get('url') || params.get('text') || params.get('title');
+  // El atajo de iPhone puede mandar el enlace sin codificar: tomamos todo lo que
+  // va detrás de "url=", aunque contenga "&" o "?".
+  const rawUrl = location.search.match(/[?&]url=(.*)$/)?.[1];
+  let sharedUrl = rawUrl;
+  try {
+    sharedUrl = rawUrl && decodeURIComponent(rawUrl);
+  } catch {
+    // Ya venía sin codificar.
+  }
+  const shared = sharedUrl || params.get('text') || params.get('title');
   if (shared && (parseVideoId(shared) || /youtu/i.test(shared))) state.pendingShare = shared;
   if (params.toString()) history.replaceState(null, '', location.pathname);
 

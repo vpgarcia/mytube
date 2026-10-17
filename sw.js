@@ -1,6 +1,6 @@
 // Service worker: guarda la app en caché para que abra rápido y funcione
 // como app instalada. Los videos y miniaturas siempre vienen de la red.
-const CACHE = 'mytube-v5';
+const CACHE = 'mytube-v6';
 const SHELL = [
   './',
   'index.html',

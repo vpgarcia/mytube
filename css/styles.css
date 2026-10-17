@@ -244,6 +244,12 @@ p { line-height: 1.45; }
   background: rgba(0, 0, 0, 0.55);
 }
 .bottom-bar .ctrl { background: var(--primary); flex: none; }
+.bottom-bar .ctrl.nav { background: rgba(255, 255, 255, 0.18); width: 52px; height: 52px; }
+.bottom-bar .ctrl.nav:disabled { opacity: 0.3; }
+@media (max-width: 480px) {
+  .bottom-bar { gap: 8px; }
+  .bottom-bar .ctrl.nav { width: 44px; height: 44px; }
+}
 .icon-pause { display: none; }
 #player[data-mode="playing"] .icon-play { display: none; }
 #player[data-mode="playing"] .icon-pause { display: block; }

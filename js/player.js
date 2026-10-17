@@ -31,7 +31,11 @@ const endMore = document.getElementById('end-more');
 const errorScreen = document.getElementById('error-screen');
 const errorText = document.getElementById('error-text');
 
+const prevBtn = document.getElementById('prev-btn');
+const nextBtn = document.getElementById('next-btn');
+
 let player = null;
+let ready = false;
 let current = null;
 let context = null;
 let progressTimer = null;
@@ -77,6 +81,7 @@ function destroy() {
     }
   }
   player = null;
+  ready = false;
   frame.replaceChildren();
 }
 
@@ -108,12 +113,44 @@ function renderMore() {
   );
 }
 
+function neighbour(delta) {
+  const list = context.list();
+  const i = list.findIndex((v) => v.id === current?.id);
+  return i < 0 ? null : list[i + delta] || null;
+}
+
+function updateNav() {
+  const single = context.list().length < 2;
+  prevBtn.hidden = single;
+  nextBtn.hidden = single;
+  prevBtn.disabled = !neighbour(-1);
+  nextBtn.disabled = !neighbour(1);
+}
+
+function goTo(delta) {
+  const video = neighbour(delta);
+  if (video) openPlayer(video, context);
+}
+
 export async function openPlayer(video, ctx) {
   context = ctx;
   current = video;
-  destroy();
   seek.value = '0';
   seek.style.setProperty('--progress', '0%');
+  updateNav();
+
+  // Con un reproductor ya en marcha cambiamos solo el video: así iOS deja que
+  // empiece sin otro toque, porque el niño ya pulsó play en este reproductor.
+  if (player && ready && screen.dataset.mode !== 'error') {
+    setMode('loading');
+    player.loadVideoById(video.id);
+    setTimeout(() => {
+      if (current === video && screen.dataset.mode === 'loading') setMode('waiting');
+    }, 1500);
+    return;
+  }
+
+  destroy();
   setMode('loading');
 
   let YT;
@@ -150,6 +187,7 @@ export async function openPlayer(video, ctx) {
     events: {
       onReady: () => {
         clearTimeout(loadTimer);
+        ready = true;
         player.playVideo();
         // Si el navegador bloqueó el autoplay, el video sigue sin empezar.
         setTimeout(() => {
@@ -188,6 +226,8 @@ screen.addEventListener('click', (e) => {
   const action = e.target.closest('[data-action]')?.dataset.action;
   if (action === 'close-player') closePlayer();
   else if (action === 'toggle-play') togglePlay();
+  else if (action === 'prev') goTo(-1);
+  else if (action === 'next') goTo(1);
   else if (action === 'replay' && player) {
     player.seekTo(0, true);
     player.playVideo();

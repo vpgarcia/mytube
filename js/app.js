@@ -295,9 +295,11 @@ function renderHome() {
 }
 
 function play(video) {
+  $('toast').hidden = true;
   show('player');
   openPlayer(video, {
     onClose: () => show('home'),
+    list: () => state.data?.videos || [],
     others: (v) => (state.data?.videos || []).filter((o) => o.id !== v.id),
   });
 }

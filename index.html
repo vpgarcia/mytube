@@ -79,9 +79,15 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4.5 8 12l7.5 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div class="bottom-bar">
+        <button class="ctrl nav" id="prev-btn" data-action="prev" aria-label="Video anterior">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+        </button>
         <button class="ctrl play" data-action="toggle-play" aria-label="Reproducir o pausar">
           <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
           <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+        </button>
+        <button class="ctrl nav" id="next-btn" data-action="next" aria-label="Video siguiente">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
         </button>
         <input type="range" id="seek" class="seek" min="0" max="100" step="0.1" value="0" aria-label="Posición">
       </div>
